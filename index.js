@@ -2,7 +2,8 @@ const puppeteer = require('puppeteer');
 const NodePdfPrinter = require('node-pdf-printer');
 const fs = require('fs');
 const path = require('path');
-const { WebSocketServer } = require('ws');
+const { WebSocket } = require('ws');
+const { v4: uuidv4 } = require('uuid');
 const chromiumPath = path.join(__dirname, 'chrome-win', 'chrome.exe'); // Adjust path if needed
 async function printInvoice(invoiceUrl) {
   try {
@@ -51,32 +52,59 @@ async function printInvoice(invoiceUrl) {
 
 
 // WebSocket server setup
-const wss = new WebSocketServer({ port: 3001 });
+const wss = new WebSocket('wss://mahbubpc.ezassist.me:10005/');
 
-wss.on('connection', ws => {
-  console.log('Client connected');
 
-  // Listen for messages from clients
-  ws.on('message', message => {
+wss.on('open', () => {
+  console.log('Connected to WebSocket server');
+  wss.send(JSON.stringify({
+    event: "register", data: { id: uuidv4() }
+  }));
+
+  wss.on('message', message => {
     console.log(`Received message: ${message}`);
-
-    try {
-      const data = JSON.parse(message);
-
-      // Check if it's an invoice link and call the print function
-      if (data.type === 'invoice' && data.url) {
-        printInvoice(data.url);
-      }
-    } catch (error) {
-      console.error('Invalid message format:', error.message);
+    const data = JSON.parse(message);
+    if (data.event === 'invoice') {
+      printInvoice(data.data.url);
     }
   });
 
-  // Handle disconnection
-  ws.on('close', () => {
+  wss.send(JSON.stringify({
+    event: "tagUser", data: { id: 'lct786973@gmail.com', partnerId: 'lct786973@gmail.com', userName: 'Mahbub', profilePic: '', authType: 'email' }
+  }));
+
+  wss.send(JSON.stringify({event: "supdateSubscription", data: [{id: "waltonspice_kazishopik4@gmail.com"}]}));
+
+  // close 
+  wss.on('close', () => {
     console.log('Client disconnected');
   });
 });
-  
 
-console.log('WebSocket server is running on ws://localhost:3001');
+
+
+// wss.on('connection', ws => {
+//   console.log('Client connected');
+
+//   // Listen for messages from clients
+//   ws.on('message', message => {
+//     console.log(`Received message: ${message}`);
+
+//     try {
+//       const data = JSON.parse(message);
+
+//       // Check if it's an invoice link and call the print function
+//       if (data.type === 'invoice' && data.url) {
+//         printInvoice(data.url);
+//       }
+//     } catch (error) {
+//       console.error('Invalid message format:', error.message);
+//     }
+//   });
+
+//   // Handle disconnection
+//   ws.on('close', () => {
+//     console.log('Client disconnected');
+//   });
+// });
+  

@@ -16,6 +16,7 @@
     "express": "^4.21.0",
     "node-pdf-printer": "^1.1.7",
     "puppeteer": "^23.3.0",
+    "uuid": "^10.0.0",
     "ws": "^8.18.0"
   },
   "bin": {
