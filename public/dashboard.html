@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login Success</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="success-container">
+        <div class="success-box">
+            <h2>Login Successful</h2>
+            <p>Welcome to the Printer Application!</p>
+            <h3>Available Printers</h3>
+            <ul id="printer-list">
+            </ul>
+            <!-- <button class="continue-btn" onclick="proceed()">Continue</button> -->
+        </div>
+    </div>
+
+    <script>
+        function proceed() {
+            window.location.href = "dashboard.html";  // Redirect to dashboard
+        }
+
+        // Fetch printer list from API
+        async function fetchPrinters() {
+            try {
+                const response = await fetch('/printers');
+                const printers = await response.json();
+
+                // Reference the printer list container
+                const printerList = document.getElementById('printer-list');
+
+                // Clear existing list if any
+                printerList.innerHTML = '';
+
+                // Check if printers are returned
+                if (printers.length > 0) {
+                    // Loop through the printers and create list items
+                    printers.forEach(printer => {
+                        const li = document.createElement('li');
+                        li.textContent = printer; // Assuming printer object has 'name' property
+                        printerList.appendChild(li);
+                    });
+                } else {
+                    printerList.innerHTML = '<li>No printers available</li>';
+                }
+            } catch (error) {
+                console.error('Error fetching printers:', error);
+                document.getElementById('printer-list').innerHTML = '<li>Error fetching printer list</li>';
+            }
+        }
+
+        // Call the function to fetch printers on page load
+        fetchPrinters();
+    </script>
+</body>
+</html>

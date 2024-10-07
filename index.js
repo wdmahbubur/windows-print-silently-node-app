@@ -1,16 +1,159 @@
-const puppeteer = require('puppeteer');
-const NodePdfPrinter = require('node-pdf-printer');
-const fs = require('fs');
-const path = require('path');
-const { WebSocket } = require('ws');
-const { v4: uuidv4 } = require('uuid');
-const chromiumPath = path.join(__dirname, 'chrome-win', 'chrome.exe'); // Adjust path if needed
+import puppeteer from 'puppeteer';
+import NodePdfPrinter from 'node-pdf-printer';
+import fs from 'fs';
+import path from 'path';
+import { WebSocket } from 'ws';
+import { v4 as uuidv4 } from 'uuid';
+import open from 'open';
+import express from 'express';
+import cors from 'cors';
+
+const app = express();
+const port = 3000;
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+app.use(cors());
+
+const severURL = 'http://localhost:10004';
+
+let loggedUserId = '';
+let loggedPassword = '';
+
+// __dirname is not defined in ES module scope
+// Use the following workaround to get the current directory
+const __dirname =  path.resolve(path.dirname('')); // path.resolve(path.dirname(''));
+
+// WebSocket client setup
+const wss = new WebSocket('wss://mahbubpc.ezassist.me:10005/');
+
+wss.on('open', () => {
+  console.log('Connected to WebSocket server');
+  wss.send(JSON.stringify({
+    event: "register", data: { id: uuidv4() }
+  }));
+
+  wss.on('message', message => {
+    //console.log(`Received message: ${message}`);
+    const data = JSON.parse(message);
+    if (data.target === 'invoice') {
+      //console.log(`Received message: ${data.notes.data}`);
+      printInvoice(data.notes.data);
+    }
+  });
+
+  // close 
+  wss.on('close', () => {
+    console.log('Client disconnected');
+  });
+});  
+
+
+// listen a local port and automatically open the browser a html page with login form
+app.listen(port, async () => {
+  console.log(`Server running at http://localhost:${port}`);
+  // Open the login page in the default browser
+  //await open(`http://localhost:${port}`);
+});
+
+app.get('/', (req, res) => {
+  res.sendFile(__dirname + '/public/index.html');
+});
+
+// get public folder as static
+app.use(express.static('public'));
+
+app.post('/login', (req, res) => {
+  const { userId, password } = req.body;
+  
+  const body = {
+    authType: '',
+    userid : userId,
+    password : password,
+    redirURL: 'http://localhost:3000/dashboard',
+    firebaseToken: '',
+    deviceId: '',
+    nfaCode: ''
+  }
+  // send login request to the server
+  fetch(severURL+'/login', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(body)
+  }).then(response => {
+    
+    if (response.ok) {
+      if ((response.url.includes(port) || response.url.includes('dashboard')) && !response.url.includes('msg')) {
+        console.log('redirect to dashboard');
+        loggedUserId = userId;
+        loggedPassword = password;
+        res.redirect('/dashboard');
+      }
+      else if(response.url.includes('msg')) {
+        // Parse the URL
+        const parsedUrl = new URL(response.url);
+
+        // Extract the 'msg' parameter
+        const errorMsg = parsedUrl.searchParams.get('msg');
+        //console.log('redirect to login page with error: '+errorMsg);
+        res.redirect('/?error='+errorMsg);
+      }
+      else {
+        console.log('redirect to login page');
+        res.redirect('/?error=Invalid credentials');
+      }
+    }
+  }).catch(error => { 
+    //console.error("Error "+error);
+    res.redirect('/?error='+error.message);
+  });
+
+});
+
+// Dashboard page
+app.get('/dashboard', (req, res) => {
+  if (loggedUserId=='') {
+    return res.redirect('/');
+  }
+
+  wss.send(JSON.stringify({
+    event: "tagUser", data: { id: loggedUserId, partnerId: loggedUserId, userName: '', profilePic: '', authType: 'email' }
+  }));
+
+  // get page list from the server
+  fetch(severURL+'/ws/showUserPages?userid='+loggedUserId, {
+    method: 'GET',
+    headers: {
+      'Content-Type': 'application/json',
+    }
+  }).then(response => {
+    return response.json();
+  }).then(data => {
+    const pages = [];
+    data[0].map(page => pages.push({id: page.pageid}))
+
+    wss.send(JSON.stringify({event: "updateSubscription", data: pages}));
+
+  }).catch(error => { 
+    console.error("Error "+error);
+  }); 
+  res.sendFile(__dirname + '/public/dashboard.html');
+});
+
+// get printer list from pc
+app.get('/printers', async(req, res) => {
+  const printers = await NodePdfPrinter.listPrinter('en-US');
+  res.json(printers);
+});
+
+//const chromiumPath = path.join(__dirname, 'chrome-win', 'chrome.exe'); // Adjust path if needed
 async function printInvoice(invoiceUrl) {
   try {
     // Launch headless browser to fetch the invoice from the URL
     const browser = await puppeteer.launch({
       headless: true,
-      executablePath: chromiumPath, // Specify the bundled Chromium path
+      //executablePath: chromiumPath, // Specify the bundled Chromium path
       args: ['--no-sandbox', '--disable-setuid-sandbox']
     });
     const page = await browser.newPage();
@@ -30,9 +173,6 @@ async function printInvoice(invoiceUrl) {
     // Close the browser
     await browser.close();
 
-    // Read the generated PDF
-    const pdfData = fs.readFileSync(pdfPath);
-
     const array = [
         pdfPath
     ];
@@ -42,7 +182,9 @@ async function printInvoice(invoiceUrl) {
     //Optionally, remove the temporary PDF file
     //fs.unlinkSync(pdfPath);
   } catch (error) {
-    console.error('Error:', error);
+    wss.send(JSON.stringify({
+      event: "invoice", data: { status: 'error', message: error.message }
+    }));
   }
 }
 
@@ -51,60 +193,3 @@ async function printInvoice(invoiceUrl) {
 //printInvoice(invoiceUrl);
 
 
-// WebSocket server setup
-const wss = new WebSocket('wss://mahbubpc.ezassist.me:10005/');
-
-
-wss.on('open', () => {
-  console.log('Connected to WebSocket server');
-  wss.send(JSON.stringify({
-    event: "register", data: { id: uuidv4() }
-  }));
-
-  wss.on('message', message => {
-    console.log(`Received message: ${message}`);
-    const data = JSON.parse(message);
-    if (data.event === 'invoice') {
-      printInvoice(data.data.url);
-    }
-  });
-
-  wss.send(JSON.stringify({
-    event: "tagUser", data: { id: 'lct786973@gmail.com', partnerId: 'lct786973@gmail.com', userName: 'Mahbub', profilePic: '', authType: 'email' }
-  }));
-
-  wss.send(JSON.stringify({event: "supdateSubscription", data: [{id: "waltonspice_kazishopik4@gmail.com"}]}));
-
-  // close 
-  wss.on('close', () => {
-    console.log('Client disconnected');
-  });
-});
-
-
-
-// wss.on('connection', ws => {
-//   console.log('Client connected');
-
-//   // Listen for messages from clients
-//   ws.on('message', message => {
-//     console.log(`Received message: ${message}`);
-
-//     try {
-//       const data = JSON.parse(message);
-
-//       // Check if it's an invoice link and call the print function
-//       if (data.type === 'invoice' && data.url) {
-//         printInvoice(data.url);
-//       }
-//     } catch (error) {
-//       console.error('Invalid message format:', error.message);
-//     }
-//   });
-
-//   // Handle disconnection
-//   ws.on('close', () => {
-//     console.log('Client disconnected');
-//   });
-// });
-  

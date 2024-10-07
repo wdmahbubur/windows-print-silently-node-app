@@ -2,9 +2,11 @@
   "name": "ezassist-silent-print",
   "version": "0.0.1",
   "description": "Print invoice silently",
+  "type": "module",
   "main": "index.js",
   "scripts": {
-    "start": "node index.js"
+    "start": "node index.js",
+    "dev": "nodemon index.js"
   },
   "keywords": [
     "ezassist",
@@ -13,8 +15,10 @@
   "author": "Md. Mahbubur Rahman",
   "license": "ISC",
   "dependencies": {
+    "cors": "^2.8.5",
     "express": "^4.21.0",
     "node-pdf-printer": "^1.1.7",
+    "open": "^10.1.0",
     "puppeteer": "^23.3.0",
     "uuid": "^10.0.0",
     "ws": "^8.18.0"
