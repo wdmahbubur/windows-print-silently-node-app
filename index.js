@@ -1,11 +1,19 @@
-import puppeteer from 'puppeteer';
-import NodePdfPrinter from 'node-pdf-printer';
-import path from 'path';
-import { WebSocket } from 'ws';
-import { v4 as uuidv4 } from 'uuid';
-import open from 'open';
-import express from 'express';
-import cors from 'cors';
+// import puppeteer from 'puppeteer';
+// import NodePdfPrinter from 'node-pdf-printer';
+// import path from 'path';
+// import { WebSocket } from 'ws';
+// import { v4 as uuidv4 } from 'uuid';
+// //import open from 'open';
+// import express from 'express';
+// import cors from 'cors';
+const puppeteer = require('puppeteer');
+const NodePdfPrinter = require('node-pdf-printer');
+const path = require('path');
+const WebSocket = require('ws');
+const { v4: uuidv4 } = require('uuid');
+//const open = require('open');
+const express = require('express');
+const cors = require('cors');
 
 const app = express();
 const port = 3000;
@@ -22,7 +30,7 @@ let loggedTimezone = '';
 
 // __dirname is not defined in ES module scope
 // Use the following workaround to get the current directory
-const __dirname =  path.resolve(path.dirname('')); // path.resolve(path.dirname(''));
+//const __dirname =  path.resolve(path.dirname('')); // path.resolve(path.dirname(''));
 
 // WebSocket client setup
 const wss = new WebSocket('wss://mahbubpc.ezassist.me:10005/');
@@ -56,15 +64,18 @@ wss.on('open', () => {
 app.listen(port, async () => {
   console.log(`Server running at http://localhost:${port}`);
   // Open the login page in the default browser
-  await open(`http://localhost:${port}`);
+  //await open(`http://localhost:${port}`);
 });
+
+// Set up static folder for Express to serve
+const publicPath = path.join(__dirname, 'public');
+app.use(express.static(publicPath));
 
 app.get('/', (req, res) => {
-  res.sendFile(__dirname + '/public/index.html');
+  res.sendFile(path.join(publicPath, 'index.html'));
 });
 
-// get public folder as static
-app.use(express.static('public'));
+
 
 app.post('/login', (req, res) => {
   const { userId, password, timezone } = req.body;
@@ -142,8 +153,8 @@ app.get('/dashboard', (req, res) => {
 
   }).catch(error => { 
     console.error("Error "+error);
-  }); 
-  res.sendFile(__dirname + '/public/dashboard.html');
+  }); +
+  res.sendFile(path.join(publicPath, 'dashboard.html'));
 });
 
 // get printer list from pc

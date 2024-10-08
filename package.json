@@ -2,11 +2,11 @@
   "name": "ezassist-silent-print",
   "version": "0.0.1",
   "description": "Print invoice silently",
-  "type": "module",
-  "main": "index.js",
+  "main": "main.js",
   "scripts": {
-    "start": "node index.js",
-    "dev": "nodemon index.js"
+    "start": "electron .",
+    "dev": "nodemon index.js",
+    "build": "electron-builder"
   },
   "keywords": [
     "ezassist",
@@ -25,5 +25,36 @@
   },
   "bin": {
     "execute": "index.js"
+  },
+  "devDependencies": {
+    "electron": "^32.1.2",
+    "electron-builder": "^25.1.7",
+    "electron-packager": "^17.1.2"
+  },
+  "files": [
+    "main.js",
+    "index.js",
+    "public/**/*",
+    "node_modules/**/*"
+  ],
+  "build": {
+    "appId": "com.ezassist.kitchen",
+    "productName": "Kitchen Print-Ezassist",
+    "directories": {
+      "output": "build"     
+    },
+    "win": {
+      "icon": "/icon.ico",    
+      "target": "nsis"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": true,
+      "allowElevation": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Kitchen Print - Ezassist",
+      "artifactName": "${productName}-Setup-${version}.${ext}"
+    }
   }
 }
