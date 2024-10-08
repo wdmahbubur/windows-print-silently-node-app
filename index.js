@@ -1,6 +1,5 @@
 import puppeteer from 'puppeteer';
 import NodePdfPrinter from 'node-pdf-printer';
-import fs from 'fs';
 import path from 'path';
 import { WebSocket } from 'ws';
 import { v4 as uuidv4 } from 'uuid';
@@ -15,9 +14,11 @@ app.use(express.urlencoded({ extended: true }));
 app.use(cors());
 
 const severURL = 'http://localhost:10004';
+const minimeURL = 'http://localhost:8300';
 
 let loggedUserId = '';
 let loggedPassword = '';
+let loggedTimezone = '';
 
 // __dirname is not defined in ES module scope
 // Use the following workaround to get the current directory
@@ -33,11 +34,14 @@ wss.on('open', () => {
   }));
 
   wss.on('message', message => {
-    //console.log(`Received message: ${message}`);
     const data = JSON.parse(message);
-    if (data.target === 'invoice') {
-      //console.log(`Received message: ${data.notes.data}`);
-      printInvoice(data.notes.data);
+    //console.log(`Received message: ${data.target}`);
+    if (data.target === 'updateOrder') {
+      //console.log(`Received message: ${JSON.stringify(data.notes)}`);
+      handleOrderUpdatePrint(data.notes.evt.orderNo);
+    }
+    else if (data.target === 'singleOrderPrint') {
+      handleSingleOrderPrint(data.notes.orderId, data.notes.kitchenId);
     }
   });
 
@@ -52,7 +56,7 @@ wss.on('open', () => {
 app.listen(port, async () => {
   console.log(`Server running at http://localhost:${port}`);
   // Open the login page in the default browser
-  //await open(`http://localhost:${port}`);
+  await open(`http://localhost:${port}`);
 });
 
 app.get('/', (req, res) => {
@@ -63,7 +67,7 @@ app.get('/', (req, res) => {
 app.use(express.static('public'));
 
 app.post('/login', (req, res) => {
-  const { userId, password } = req.body;
+  const { userId, password, timezone } = req.body;
   
   const body = {
     authType: '',
@@ -88,6 +92,7 @@ app.post('/login', (req, res) => {
         console.log('redirect to dashboard');
         loggedUserId = userId;
         loggedPassword = password;
+        loggedTimezone = timezone;
         res.redirect('/dashboard');
       }
       else if(response.url.includes('msg')) {
@@ -147,8 +152,9 @@ app.get('/printers', async(req, res) => {
   res.json(printers);
 });
 
-//const chromiumPath = path.join(__dirname, 'chrome-win', 'chrome.exe'); // Adjust path if needed
-async function printInvoice(invoiceUrl) {
+//=const chromiumPath = path.join(__dirname, 'chrome-win', 'chrome.exe'); // Adjust path if needed
+async function printInvoice(invoiceUrl, printer) {
+  //console.log('printInvoice: '+invoiceUrl);
   try {
     // Launch headless browser to fetch the invoice from the URL
     const browser = await puppeteer.launch({
@@ -162,7 +168,7 @@ async function printInvoice(invoiceUrl) {
     await page.goto(invoiceUrl, { waitUntil: 'networkidle2' });
 
     // Generate a temporary PDF file of the invoice
-    const pdfPath = path.join(__dirname, 'invoice.pdf');
+    const pdfPath = path.join(__dirname, `invoice${new Date().getTime()}.pdf`);
     await page.pdf({ path: pdfPath, width: '76mm', printBackground: true , margin: {
         top: '2mm',
         bottom: '2mm',
@@ -177,19 +183,122 @@ async function printInvoice(invoiceUrl) {
         pdfPath
     ];
 
-    NodePdfPrinter.printFiles(array, 'POS-80C');
+    NodePdfPrinter.printFiles(array, printer);
+
+    handleKitchenPrinter('Success');
 
     //Optionally, remove the temporary PDF file
     //fs.unlinkSync(pdfPath);
   } catch (error) {
-    wss.send(JSON.stringify({
-      event: "invoice", data: { status: 'error', message: error.message }
-    }));
+    console.error(error);
+    handleKitchenPrinter('Error');
+  }
+}
+var kitchenPrinterQue = [];
+function handleOrderUpdatePrint(orderId){
+  //console.log('Order update received: '+orderId);
+  fetch(minimeURL+"/ws/getorderdetailsinfo?orderId=" + orderId, {
+    method: 'GET',
+    headers: {
+      'Content-Type': 'application/json',
+    }
+  }).then(response => {
+    return response.json();
+  }).then(data => {
+    const wsOrderData = data[0];
+    //console.log(wsOrderData);
+    if (wsOrderData.lastActivity == 'Received') {
+      let kitchens;
+      try {
+        kitchens = JSON.parse(wsOrderData.kitchens);
+      } catch (err) {
+        kitchens = wsOrderData.kitchens;
+      }
+      for (let i = 0; i < kitchens.length; i++) {
+          if (kitchens[i].printerId == null || kitchens[i].printerId == '') continue;
+
+          let url;
+          if (kitchens[i].invoice == 'Kitchen Token') {
+              url = minimeURL+'/get-kitchen-invoice?orderId=' + orderId + '&kitchenId=' + kitchens[i].kitchenId + '&timeZone=' + loggedTimezone;
+          }
+          else {
+              url = minimeURL+ '/pos-80?orderId=' + orderId + '&kitchenId=' + kitchens[i].kitchenId + '&timeZone=' + loggedTimezone;
+          }
+
+          const notes = {
+              url: url, printer: kitchens[i].printerId, kitchenId: kitchens[i].kitchenId, orderNo: orderId, myId: wsOrderData.myId
+          };
+          kitchenPrinterQue.push(notes);
+      }
+      handleKitchenPrinter('Print');
+  }
+  }).catch(error => {
+    console.error("Error "+error);
+  });
+}
+
+function handleKitchenPrinter(event) {
+  //console.log('handleKithcenPrinter: '+event);
+  switch (event) {
+      case 'Print':
+        if (kitchenPrinterQue.length>0) {
+          printInvoice(kitchenPrinterQue[0].url, kitchenPrinterQue[0].printer, kitchenPrinterQue[0].myId, kitchenPrinterQue[0].kitchenId);
+        }
+          break;
+      case 'Success':
+          kitchenPrinterQue.shift();
+          if (kitchenPrinterQue.length>0) {
+              handleKitchenPrinter('Print');
+          }
+          break;
+      case 'Error':
+          kitchenPrinterQue.shift();
+          if (kitchenPrinterQue.length>0) {
+              handleKitchenPrinter('Print');
+          }
+          break;
+      default:
+          break;
   }
 }
 
-// Example usage
-//const invoiceUrl = 'https://minimews.sharedtoday.com/pos-80?orderId=2165742&timeZone=Asia/Dhaka';
-//printInvoice(invoiceUrl);
+function handleSingleOrderPrint(orderId, kitchenId) {
+  //console.log('Order update received: '+orderId + ' kitchenId: '+kitchenId);
+  fetch(minimeURL+"/ws/getorderdetailsinfo?orderId=" + orderId, {
+    method: 'GET',
+    headers: {
+      'Content-Type': 'application/json',
+    }
+  }).then(response => {
+    return response.json();
+  }).then(data => {
+    const wsOrderData = data[0];    
+    let kitchens;
+    try {
+      kitchens = JSON.parse(wsOrderData.kitchens);
+    } catch (err) {
+      kitchens = wsOrderData.kitchens;
+    }
+    for (let i = 0; i < kitchens.length; i++) {
+      if (kitchens[i].kitchenId != kitchenId) continue;
+      if (kitchens[i].printerId == null || kitchens[i].printerId == '') continue;
+      
+      let url;
+      if (kitchens[i].invoice == 'Kitchen Token') {
+          url = minimeURL+'/get-kitchen-invoice?orderId=' + orderId + '&kitchenId=' + kitchens[i].kitchenId + '&timeZone=' + loggedTimezone;
+      }
+      else {
+          url = minimeURL+ '/pos-80?orderId=' + orderId + '&kitchenId=' + kitchens[i].kitchenId + '&timeZone=' + loggedTimezone;
+      }
 
-
+      const notes = {
+          url: url, printer: kitchens[i].printerId, kitchenId: kitchens[i].kitchenId, orderNo: orderId, myId: wsOrderData.myId
+      };
+      kitchenPrinterQue.push(notes);
+  }
+  handleKitchenPrinter('Print');
+  
+  }).catch(error => {
+    console.error("Error "+error);
+  });
+}
