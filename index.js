@@ -14,6 +14,7 @@ const { v4: uuidv4 } = require('uuid');
 //const open = require('open');
 const express = require('express');
 const cors = require('cors');
+const fs = require('fs');
 
 const app = express();
 const port = 3000;
@@ -56,6 +57,10 @@ wss.on('open', () => {
   // close 
   wss.on('close', () => {
     console.log('Client disconnected');
+    setTimeout(() => {
+      console.log('Reconnecting to WebSocket server');
+      wss = new WebSocket('wss://mahbubpc.ezassist.me:10005/');
+    }, 3000);
   });
 });  
 
@@ -75,6 +80,21 @@ app.get('/', (req, res) => {
   res.sendFile(path.join(publicPath, 'index.html'));
 });
 
+// Define the log file path (you can modify this to store the log in a more appropriate directory)
+const logFilePath = path.join(__dirname, 'error-log.txt');
+
+// Function to log messages to the file
+function logError(message) {
+  const timestamp = new Date().toISOString();
+  const formattedMessage = `[${timestamp}] ${message}\n`;
+
+  // Append the message to the log file
+  fs.appendFile(logFilePath, formattedMessage, (err) => {
+    if (err) {
+      console.error('Failed to write to log file', err);
+    }
+  });
+}
 
 
 app.post('/login', (req, res) => {
@@ -165,46 +185,35 @@ app.get('/printers', async(req, res) => {
 
 //=const chromiumPath = path.join(__dirname, 'chrome-win', 'chrome.exe'); // Adjust path if needed
 async function printInvoice(invoiceUrl, printer) {
-  //console.log('printInvoice: '+invoiceUrl);
   try {
-    // Launch headless browser to fetch the invoice from the URL
     const browser = await puppeteer.launch({
       headless: true,
-      //executablePath: chromiumPath, // Specify the bundled Chromium path
+      executablePath: getChromiumExecutablePath(), 
       args: ['--no-sandbox', '--disable-setuid-sandbox']
     });
     const page = await browser.newPage();
-
-    // Go to the invoice URL
     await page.goto(invoiceUrl, { waitUntil: 'networkidle2' });
 
-    // Generate a temporary PDF file of the invoice
     const pdfPath = path.join(__dirname, `invoice${new Date().getTime()}.pdf`);
-    await page.pdf({ path: pdfPath, width: '76mm', printBackground: true , margin: {
-        top: '2mm',
-        bottom: '2mm',
-        left: '2mm',
-        right: '2mm'
-    }});
+    await page.pdf({
+      path: pdfPath,
+      width: '76mm',
+      printBackground: true,
+      margin: { top: '2mm', bottom: '2mm', left: '2mm', right: '2mm' }
+    });
 
-    // Close the browser
     await browser.close();
 
-    const array = [
-        pdfPath
-    ];
+    // Print the PDF file
+    NodePdfPrinter.printFiles([pdfPath], printer);
 
-    NodePdfPrinter.printFiles(array, printer);
-
-    handleKitchenPrinter('Success');
-
-    //Optionally, remove the temporary PDF file
-    //fs.unlinkSync(pdfPath);
   } catch (error) {
-    console.error(error);
-    handleKitchenPrinter('Error');
+    // Log the error to file
+    logError(`Error while printing invoice: ${error.stack}`);
+    console.error('Print failed', error);
   }
 }
+
 var kitchenPrinterQue = [];
 function handleOrderUpdatePrint(orderId){
   //console.log('Order update received: '+orderId);

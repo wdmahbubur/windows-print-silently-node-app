@@ -9,6 +9,8 @@
 <body>
     <div class="success-container">
         <div class="success-box">
+            <!-- Show websocket is offline -->
+            <p id="ws-status" style="color: red; display: none;">Offline</p>
             <h2>Login Successful</h2>
             <p>Welcome to the Printer Application!</p>
             <h3>Available Printers</h3>
@@ -54,6 +56,23 @@
 
         // Call the function to fetch printers on page load
         fetchPrinters();
+
+        // check websocket connection
+        const ws = new WebSocket('wss://mahbubpc.ezassist.me:10005/');
+        const wsStatus = document.getElementById('ws-status');
+        ws.onopen = () => {
+            wsStatus.style.display = 'none';
+        };
+        ws.onclose = () => {
+            wsStatus.style.display = 'block';
+            setTimeout(() => {
+                ws = new WebSocket('wss://mahbubpc.ezassist.me:10005/');
+            }, 3000);
+        };
+        ws.onerror = (error) => {
+            wsStatus.style.display = 'block';
+        };
+        
     </script>
 </body>
 </html>
