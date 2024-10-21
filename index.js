@@ -1,17 +1,9 @@
-// import puppeteer from 'puppeteer';
-// import NodePdfPrinter from 'node-pdf-printer';
-// import path from 'path';
-// import { WebSocket } from 'ws';
-// import { v4 as uuidv4 } from 'uuid';
-// //import open from 'open';
-// import express from 'express';
-// import cors from 'cors';
+
 const puppeteer = require('puppeteer');
 const NodePdfPrinter = require('node-pdf-printer');
 const path = require('path');
 const WebSocket = require('ws');
 const { v4: uuidv4 } = require('uuid');
-//const open = require('open');
 const express = require('express');
 const cors = require('cors');
 const fs = require('fs');
@@ -188,13 +180,14 @@ async function printInvoice(invoiceUrl, printer) {
   try {
     const browser = await puppeteer.launch({
       headless: true,
-      executablePath: getChromiumExecutablePath(), 
+      //executablePath: getChromiumExecutablePath(), 
       args: ['--no-sandbox', '--disable-setuid-sandbox']
     });
     const page = await browser.newPage();
     await page.goto(invoiceUrl, { waitUntil: 'networkidle2' });
 
     const pdfPath = path.join(__dirname, `invoice${new Date().getTime()}.pdf`);
+    logError(`pdfPath: ${pdfPath}`);
     await page.pdf({
       path: pdfPath,
       width: '76mm',
@@ -207,6 +200,7 @@ async function printInvoice(invoiceUrl, printer) {
     // Print the PDF file
     NodePdfPrinter.printFiles([pdfPath], printer);
 
+    handleKitchenPrinter('Success');
   } catch (error) {
     // Log the error to file
     logError(`Error while printing invoice: ${error.stack}`);

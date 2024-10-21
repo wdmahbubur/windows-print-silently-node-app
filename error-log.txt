@@ -1,0 +1,7 @@
+[2024-10-21T11:39:07.230Z] pdfPath: F:\Silent Print\invoice1729510747230.pdf
+[2024-10-21T11:39:14.051Z] pdfPath: F:\Silent Print\invoice1729510754051.pdf
+[2024-10-21T11:40:54.757Z] pdfPath: F:\Silent Print\invoice1729510854757.pdf
+[2024-10-21T11:46:28.575Z] pdfPath: F:\Silent Print\invoice1729511188575.pdf
+[2024-10-21T11:46:30.042Z] pdfPath: F:\Silent Print\invoice1729511190042.pdf
+[2024-10-21T11:46:49.873Z] pdfPath: F:\Silent Print\invoice1729511209873.pdf
+[2024-10-21T11:46:57.566Z] pdfPath: F:\Silent Print\invoice1729511217566.pdf
